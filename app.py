@@ -35,10 +35,16 @@ events_collection = db['events']
 def index():
     return render_template('index.html')
 
-@app.route('/webhook', methods=['GET', 'POST', 'HEAD'])
+@app.route('/webhook', methods=['GET', 'POST', 'HEAD', 'OPTIONS'])
 def github_webhook():
+    if request.method == 'OPTIONS':
+        return '', 200
+
     if request.method in ['GET', 'HEAD']:
         return "✅ Webhook endpoint is active.", 200
+
+    # ... rest of your POST logic
+
 
     data = request.json
 
