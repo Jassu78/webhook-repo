@@ -73,7 +73,7 @@
   </main>
 
   <footer>
-    Developed by Jaswanth Jogi • Developer Assessment Task
+    Developed by Jaswanth Jogi
   </footer>
 
   <script>
@@ -97,8 +97,8 @@
         } else if (e.type === 'merge_group') {
           msg = `${e.author} merged a branch on ${e.timestamp}`;
         } else if (e.type === 'merge') {
-  msg = `${e.author} merged branch ${e.from_branch} to ${e.to_branch} on ${e.timestamp}`;
-}
+          msg = `${e.author} merged branch ${e.from_branch} to ${e.to_branch} on ${e.timestamp}`;
+        }
 
         const card = document.createElement('div');
         card.className = 'event-card';
