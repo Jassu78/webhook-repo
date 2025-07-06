@@ -12,18 +12,18 @@ CORS(app)
 # MongoDB Atlas connection
 # ----------------------------
 
-# Use environment variable for security (recommended for production)
-uri = os.environ.get("MONGO_URI", "mongodb+srv://jassu78:9491011303@cluster0.75pcejp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+uri = os.environ.get(
+    "MONGO_URI",
+    "mongodb+srv://jassu78:9491011303@cluster0.75pcejp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+)
 client = MongoClient(uri, server_api=ServerApi('1'))
 
-# Confirm connection
 try:
     client.admin.command('ping')
     print("✅ Successfully connected to MongoDB!")
 except Exception as e:
     print("❌ Connection error:", e)
 
-# Select database and collection
 db = client['webhookdb']
 events_collection = db['events']
 
@@ -43,50 +43,55 @@ def github_webhook():
     if request.method in ['GET', 'HEAD']:
         return "✅ Webhook endpoint is active.", 200
 
-    # ... rest of your POST logic
-
-
     data = request.json
-
-    # Determine GitHub event type from headers
     event_type = request.headers.get('X-GitHub-Event')
     event = {}
 
+    # ----------------------------
+    # Handle PUSH event
+    # ----------------------------
     if event_type == 'push' and data and 'pusher' in data and 'ref' in data:
+        head_commit = data.get('head_commit', {})
+        timestamp = head_commit.get('timestamp', datetime.utcnow().strftime("%d %B %Y - %I:%M %p UTC"))
         event = {
             'type': 'push',
             'author': data['pusher']['name'],
             'to_branch': data['ref'].split('/')[-1],
-            'timestamp': datetime.utcnow().strftime("%d %B %Y - %I:%M %p UTC")
+            'timestamp': timestamp
         }
 
+    # ----------------------------
+    # Handle PULL REQUEST & MERGE events
+    # ----------------------------
     elif event_type == 'pull_request' and data and 'pull_request' in data:
         action = data.get('action', '')
-        if action in ['opened', 'closed']:
-            pr = data['pull_request']
+        pr = data['pull_request']
+        if action == 'closed' and pr.get('merged', False):
+            # MERGE event
+            event = {
+                'type': 'merge',
+                'author': pr['user']['login'],
+                'from_branch': pr['head']['ref'],
+                'to_branch': pr['base']['ref'],
+                'timestamp': pr['merged_at']
+            }
+        elif action == 'opened':
+            # PULL REQUEST event
             event = {
                 'type': 'pull_request',
                 'author': pr['user']['login'],
                 'from_branch': pr['head']['ref'],
                 'to_branch': pr['base']['ref'],
-                'timestamp': datetime.utcnow().strftime("%d %B %Y - %I:%M %p UTC")
-            }
-
-    elif event_type == 'merge_group':
-        # Debug: log incoming merge_group payload to console
-        print("Merge group payload:", data)
-        if data and 'sender' in data:
-            event = {
-                'type': 'merge_group',
-                'author': data['sender']['login'],
-                'timestamp': datetime.utcnow().strftime("%d %B %Y - %I:%M %p UTC")
+                'timestamp': pr['created_at']
             }
 
     else:
         # Ignore other events
         return jsonify({'status': 'ignored'}), 200
 
-    # Insert event into MongoDB if event dict is populated
+    # ----------------------------
+    # Insert into MongoDB
+    # ----------------------------
     if event:
         events_collection.insert_one(event)
         return jsonify({'status': 'success'}), 200
