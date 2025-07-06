@@ -35,9 +35,9 @@ events_collection = db['events']
 def index():
     return render_template('index.html')
 
-@app.route('/webhook', methods=['GET', 'POST'])
+@app.route('/webhook', methods=['GET', 'POST', 'HEAD'])
 def github_webhook():
-    if request.method == 'GET':
+    if request.method in ['GET', 'HEAD']:
         return "✅ Webhook endpoint is active.", 200
 
     data = request.json
@@ -46,7 +46,7 @@ def github_webhook():
     event_type = request.headers.get('X-GitHub-Event')
     event = {}
 
-    if event_type == 'push':
+    if event_type == 'push' and data and 'pusher' in data and 'ref' in data:
         event = {
             'type': 'push',
             'author': data['pusher']['name'],
@@ -54,32 +54,38 @@ def github_webhook():
             'timestamp': datetime.utcnow().strftime("%d %B %Y - %I:%M %p UTC")
         }
 
-    elif event_type == 'pull_request':
-        action = data['action']
+    elif event_type == 'pull_request' and data and 'pull_request' in data:
+        action = data.get('action', '')
         if action in ['opened', 'closed']:
+            pr = data['pull_request']
             event = {
                 'type': 'pull_request',
-                'author': data['pull_request']['user']['login'],
-                'from_branch': data['pull_request']['head']['ref'],
-                'to_branch': data['pull_request']['base']['ref'],
+                'author': pr['user']['login'],
+                'from_branch': pr['head']['ref'],
+                'to_branch': pr['base']['ref'],
                 'timestamp': datetime.utcnow().strftime("%d %B %Y - %I:%M %p UTC")
             }
 
     elif event_type == 'merge_group':
-        # Example placeholder for merge_group event handling
-        event = {
-            'type': 'merge_group',
-            'author': data['sender']['login'],
-            'timestamp': datetime.utcnow().strftime("%d %B %Y - %I:%M %p UTC")
-        }
+        # Debug: log incoming merge_group payload to console
+        print("Merge group payload:", data)
+        if data and 'sender' in data:
+            event = {
+                'type': 'merge_group',
+                'author': data['sender']['login'],
+                'timestamp': datetime.utcnow().strftime("%d %B %Y - %I:%M %p UTC")
+            }
 
     else:
         # Ignore other events
         return jsonify({'status': 'ignored'}), 200
 
-    # Insert event into MongoDB
-    events_collection.insert_one(event)
-    return jsonify({'status': 'success'}), 200
+    # Insert event into MongoDB if event dict is populated
+    if event:
+        events_collection.insert_one(event)
+        return jsonify({'status': 'success'}), 200
+    else:
+        return jsonify({'status': 'no_data'}), 200
 
 @app.route('/events', methods=['GET'])
 def get_events():
